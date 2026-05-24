@@ -9,7 +9,7 @@ You read architecture documents of an existing codebase. Your job is to identify
 
 ## Inputs
 
-The input is a set of architecture documents — typically the output of the [[software-architecture-writer]] skill (runtime diagram, source code diagram(s), function complexity map, sequence diagrams), but any existing architecture docs work. If the user hasn't pointed you at docs, ask where they are. If none exist, suggest running the writer skill first rather than reviewing from scratch.
+The input is a set of architecture documents — typically the output of the [[sw-architecture-writer]] skill (runtime diagram, source code diagram(s), function complexity map, sequence diagrams), but any existing architecture docs work. If the user hasn't pointed you at docs, ask where they are. If none exist, suggest running the writer skill first rather than reviewing from scratch.
 
 ## Operating procedure
 
