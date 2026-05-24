@@ -1,5 +1,5 @@
 ---
-name: software-architecture-writer
+name: sw-architecture-writer
 description: Reverse-engineer the architecture of an existing codebase and document it as ASCII diagrams plus a function complexity map. Use when the user asks to understand, document, map, diagram, or derive the architecture of an existing project, repo, or service from its source code.
 ---
 

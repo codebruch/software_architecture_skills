@@ -1,5 +1,5 @@
 ---
-name: architecture-reviewer
+name: sw-architecture-reviewer
 description: Read architecture documents of an existing codebase, identify improvements across simplicity / testability / robustness / observability, score each by risk and cost, let the user pick which to pursue, then draw the proposed future-state architecture and produce an implementation plan. Use when the user asks to review, audit, improve, or modernize the architecture of an existing codebase based on its architecture docs.
 ---
 
