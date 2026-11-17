@@ -45,3 +45,8 @@ venv/
 dist/
 build/
 *.egg-info/
+
+# eval output
+evals/results/
+*/evals/results/
+*-workspace/

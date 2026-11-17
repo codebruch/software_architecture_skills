@@ -6,6 +6,7 @@ Run through this before handing the architecture write-up to the user.
 
 - [ ] All four deliverables present: runtime diagram, source code diagram(s), function complexity table, sequence diagram(s).
 - [ ] At least one source code diagram **per language** in the repo.
+- [ ] Each source code diagram has its module coupling table (fan-in, fan-out, cycles flagged).
 - [ ] Wiring artifacts (Dockerfile, docker-compose, Makefile, CI, IaC) are diagrammed or listed if they exist.
 - [ ] Actors (end users, external systems, operators) appear on runtime and sequence diagrams where applicable.
 

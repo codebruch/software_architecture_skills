@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: finds-report-bottleneck
+expected_outcome: |
+  A measured diagnosis of the slow top-customers report in the orderdesk sample service: a baseline
+  taken by running the code on the 2,000 / 20,000 data set, the per-customer rescan of all orders in
+  reports.top_customers identified as the dominant cost, and scored options led by an algorithmic or
+  query-level fix. The more complex but cold format_report_row is not targeted, no rewrite in another
+  language is proposed, and no code is changed before the user chooses.
+context:
+  scaffold_script: place-files.sh

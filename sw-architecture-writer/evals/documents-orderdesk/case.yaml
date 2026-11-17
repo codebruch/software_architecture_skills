@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: documents-orderdesk
+expected_outcome: |
+  An architecture write-up of the orderdesk sample service, derived from the code and saved to
+  docs/architecture/architecture.md: runtime diagram, source code diagram, function complexity map and
+  sequence diagrams, with a header naming the commit and how complexity was measured. It reflects what
+  the code does (SQLite, PayFast API, an in-process cache, an events log written by a background thread)
+  and not the README's claim that Redis is used.
+context:
+  scaffold_script: place-files.sh

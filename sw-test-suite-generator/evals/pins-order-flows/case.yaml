@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: pins-order-flows
+expected_outcome: |
+  A passing characterization test suite for order creation and refunds in the orderdesk sample
+  service, written with unittest, that never calls the real payment API and never uses the default
+  database file. It pins today's behavior including the truncated tax and the partial-refund status,
+  was shown to fail on a deliberate change, and leaves the production code untouched.
+context:
+  scaffold_script: place-files.sh

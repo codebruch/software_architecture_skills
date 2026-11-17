@@ -64,6 +64,13 @@ How code is organized — packages, modules, classes — and how they depend on 
 - Show package/module boundaries and the direction of imports/dependencies.
 - Group by layer or domain if the code is structured that way (handlers → services → repositories).
 
+Under each diagram, add a short **module coupling table** — it is the evidence a later review needs to tell a well-used core from a tangle:
+
+| Module | Depends on (fan-out) | Depended on by (fan-in) | Notes |
+|--------|----------------------|-------------------------|-------|
+
+Count internal modules only, from the imports. In Notes, flag dependency cycles, modules that skip a layer, and any module with both high fan-in and high fan-out (everything depends on it and it depends on everything). If git history is available, also list the pairs or groups of files that most often change in the same commit; files that always move together but live apart are worth knowing about.
+
 Then, **for each artifact that wires multiple languages or components together** (Dockerfiles, docker-compose, Makefiles, Bazel BUILD files, CI pipelines, Terraform, Helm charts), add a separate small diagram or list showing what it composes and in what order.
 
 Example:

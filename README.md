@@ -1,6 +1,6 @@
 # software_architecture_skills
 
-Five Claude Code skills that work as a pipeline for understanding, protecting, improving, optimizing, and verifying the architecture of an existing codebase.
+Six Claude Code skills that work as a pipeline for understanding, protecting, improving, securing, optimizing, and verifying the architecture of an existing codebase.
 
 ## Skills
 
@@ -75,6 +75,17 @@ Reads architecture documents (typically the writer's output) and proposes improv
 
 It checks each finding against the code (the docs say where to look; the code says whether it's true), scores **benefit**, **risk**, and **cost**, then lets the user select which to pursue. Only for the selected items it draws the future-state architecture (runtime, source code, sequence diagrams) and produces a phased implementation plan with validation and rollback per phase — opening with a characterization-test phase when the code to be changed is untested. The review is saved to `docs/architecture/review.md` for the visualizer.
 
+The dimensions draw on the familiar design principles and named anti-patterns (coupling and cohesion, god modules, leaky abstractions, cross-cutting concerns copied inline, static state), used critically: a principle is a place to look, never the finding. A finding has to name what the problem costs in this codebase, and the reviewer is told not to prescribe a style, a rewrite, or abstraction for its own sake.
+
+### `sw-security-scanner`
+Scans the code itself — a whole repository or just a diff — for general security vulnerabilities, with a checklist drawn from the [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/): access control, authentication and sessions, injection, browser-facing output, files and parsers, outbound requests, cryptography and secrets, errors and logging, business logic, dependencies, and deployment configuration.
+
+- **Verification over detection** — it maps the attack surface, runs whatever scanners are installed, traces untrusted input from source to sink, and then checks every candidate (is the input really attacker-controlled, is the sink reachable, is there a control upstream?) before it becomes a finding. Dismissed leads are listed with the reason.
+- **Rules of engagement** — it reads code and nothing else: no requests to live systems, no testing of credentials it finds, no secret values in the report, no working exploits, no code changes during the scan.
+- **A report you can act on** — severity from reachability and impact, the specific fix for this codebase, a regression test per fix, and a plain list of what was *not* covered. Saved to `docs/architecture/security-scan.md`; the user then picks what to fix.
+
+Where the reviewer's security dimension asks whether the *design* puts checks at the right boundaries, the scanner asks whether each line that touches untrusted data is safe.
+
 ### `sw-performance-optimizer`
 Analyzes the codebase together with its architecture documents to propose **concrete, measured** performance optimizations. It walks a strict priority ladder, cheapest-effective-fix first:
 
@@ -104,6 +115,7 @@ Globally (available everywhere):
 ln -s "$(pwd)/sw-architecture-writer"    ~/.claude/skills/
 ln -s "$(pwd)/sw-test-suite-generator"   ~/.claude/skills/
 ln -s "$(pwd)/sw-architecture-reviewer"  ~/.claude/skills/
+ln -s "$(pwd)/sw-security-scanner"       ~/.claude/skills/
 ln -s "$(pwd)/sw-performance-optimizer"  ~/.claude/skills/
 ln -s "$(pwd)/sw-refactor-visualizer"    ~/.claude/skills/
 ```
@@ -123,6 +135,7 @@ The skills hand work to each other through files, by default under `docs/archite
 | `architecture.md` | writer | all the others |
 | `test-coverage-map.md` | test-suite-generator | reviewer, optimizer, visualizer |
 | `review.md` | reviewer | visualizer |
+| `security-scan.md` | security scanner | reviewer, you |
 | `performance.md` | optimizer | visualizer |
 | `refactor-report.md` | visualizer | you |
 
@@ -134,11 +147,26 @@ The skills auto-trigger from their descriptions, or invoke manually:
 /sw-architecture-writer
 /sw-test-suite-generator
 /sw-architecture-reviewer
+/sw-security-scanner
 /sw-performance-optimizer
 /sw-refactor-visualizer
 ```
 
-Typical pipeline: run the **writer** against an unfamiliar codebase; use the **test-suite-generator** to lay down a characterization safety net over the current behavior *before* changing anything; feed the writer's output to the **reviewer** to plan structural improvements (and/or to the **optimizer** to plan measured performance work); implement the selected ones — with the safety net catching any behavior that drifts; then run the **visualizer** to see the before/after impact and confirm complexity actually dropped. The **test-suite-generator** is what makes the bigger changes safe to make: it pins existing behavior so a refactor, migration, or optimization can't quietly regress it, and it does so without ever touching the real database. The **optimizer** is independent of the reviewer — reach for it whenever the goal is speed, latency, or resource cost rather than structure, using the writer's complexity map as its starting point.
+Typical pipeline: run the **writer** against an unfamiliar codebase; use the **test-suite-generator** to lay down a characterization safety net over the current behavior *before* changing anything; feed the writer's output to the **reviewer** to plan structural improvements (and/or to the **optimizer** to plan measured performance work); implement the selected ones — with the safety net catching any behavior that drifts; then run the **visualizer** to see the before/after impact and confirm complexity actually dropped. The **test-suite-generator** is what makes the bigger changes safe to make: it pins existing behavior so a refactor, migration, or optimization can't quietly regress it, and it does so without ever touching the real database. The **security scanner** is independent of the rest — run it on the whole repository before a release, or on a branch before merging. The **optimizer** is independent of the reviewer — reach for it whenever the goal is speed, latency, or resource cost rather than structure, using the writer's complexity map as its starting point.
+
+## Evals
+
+Each skill has eval cases under `sw-*/evals/`, all run against one small sample service with known, planted problems in `eval-fixtures/` — so a result can be checked against an answer key instead of by impression. See [eval-fixtures/README.md](eval-fixtures/README.md) for what is planted and how to run them.
+
+| Skill | Case | What it checks |
+|-------|------|----------------|
+| writer | `documents-orderdesk` | all four deliverables, saved with commit and method; real boundaries drawn; the README's false Redis claim not believed |
+| reviewer | `reviews-orderdesk` | findings verified and scored; the open admin endpoint raised first; the secret not reproduced; stops for the user's choice |
+| reviewer | `plans-selected-improvements` | diagrams only for what was selected; safety-net phase first; unselected security findings kept as accepted risk |
+| test-suite generator | `pins-order-flows` | passing suite with payment and database isolated; quirks pinned, not fixed; shown to fail on a deliberate change |
+| security scanner | `scans-orderdesk` | injection traced end to end; a business-logic flaw found; inapplicable categories skipped; read-only |
+| optimizer | `finds-report-bottleneck` | measured baseline; the real hot loop found, not the more complex decoy; algorithmic fix first |
+| visualizer | `reports-partial-refactor` | done / partial / not-done told apart; moved complexity noticed; a quietly edited test assertion flagged |
 
 ## License
 

@@ -25,7 +25,7 @@ Read every supplied document end-to-end before writing anything. Build a mental 
 
 Find concrete, specific improvements. Generic advice is worthless here — every suggestion must reference a specific component, function, or flow from the docs.
 
-Work through each dimension. See [dimensions.md](dimensions.md) for what to look for and concrete patterns/anti-patterns.
+Work through each dimension. See [dimensions.md](dimensions.md) for what to look for and concrete patterns/anti-patterns. It draws on the usual design principles and named anti-patterns, and opens with how to use them: as places to look, never as the finding itself.
 
 1. **Simplicity** — overlong functions, deep nesting, premature abstractions, speculative generality, configuration knobs nobody uses.
 2. **Testability** — tangled concerns (e.g., business logic mixed with I/O), hard-to-mock dependencies, hidden global state, untestable singletons.
@@ -33,7 +33,7 @@ Work through each dimension. See [dimensions.md](dimensions.md) for what to look
 4. **Observability** — silent failures, missing structured logging, no tracing across service boundaries, no way to toggle debug detail at runtime.
 5. **Security** — entry points with no authentication or authorization check, untrusted input reaching a query/command/template, secrets in code or logs, over-privileged credentials, sensitive data crossing a boundary unprotected.
 
-For security, start from the runtime diagram: every arrow that begins at an actor or an external system crosses a **trust boundary**, and each one needs an answer to "who is this, are they allowed, and is what they sent safe to use?". This is an architecture-level review, not a penetration test or a dependency audit — say so in the findings, so an empty security section isn't read as a clean bill of health.
+For security, start from the runtime diagram: every arrow that begins at an actor or an external system crosses a **trust boundary**, and each one needs an answer to "who is this, are they allowed, and is what they sent safe to use?". This is an architecture-level review, not a penetration test or a dependency audit — say so in the findings, so an empty security section isn't read as a clean bill of health. For a line-by-line look at the code (injection sinks, cryptography, secrets in history, dependencies), point the user to [[sw-security-scanner]]; if it has already run, read `docs/architecture/security-scan.md` and fold its confirmed findings into yours instead of rediscovering them.
 
 Aim for 2–6 improvements *per dimension* where the docs support them. Don't pad — if a dimension is already strong, say so and move on.
 
@@ -114,6 +114,9 @@ Write the full findings table (every item, with the selected ones marked), the t
 - **Reviewing the diagram instead of the system.** A finding you didn't check against the code is a hypothesis. Mark it `inferred` or verify it.
 - **Recommending the cheap over the valuable.** Low risk and low cost don't justify a change that removes no real pain. Benefit comes first.
 - **Rubber-stamping.** If you can't find improvements, either the docs are too thin or you didn't read carefully — say which.
+- **Citing a principle as the problem.** "Violates SRP", "not DRY", "tight coupling" are labels. A finding states what it costs here — which changes are slow, which failures happen, which tests can't be written — with the evidence.
+- **Prescribing a style.** "Move to clean architecture / hexagonal / microservices / CQRS" is a rewrite wearing a diagram. Propose the smallest boundary that removes a demonstrated cost; a named style is at most where several such steps might lead.
+- **Abstraction as improvement.** Adding interfaces, layers, or extension points makes code more complex today in exchange for flexibility later. Recommend it only where history shows the flexibility being needed.
 - **Generic suggestions.** "Add more tests" is not an improvement. "Extract the tax calculation in `pricing.py:calc_total` from the SQL call so it can be unit-tested without a DB" is.
 - **Solutioning past the user's choice.** Don't draw diagrams for improvements the user didn't pick.
 - **Scoring everything Medium.** If everything is medium benefit, medium risk, and medium cost, you haven't actually thought about the differences.

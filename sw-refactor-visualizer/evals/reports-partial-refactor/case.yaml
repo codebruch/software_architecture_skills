@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: reports-partial-refactor
+expected_outcome: |
+  A before/after report on the orderdesk sample service saved to docs/architecture/refactor-report.md
+  with mermaid diagrams. It finds that the pricing extraction landed but mostly moved complexity into
+  the new function, that payload validation is only partial, that the admin export token check was
+  never implemented, and that the characterization test's expected tax was edited during the work -
+  a behavior change the review said must not happen.
+context:
+  scaffold_script: place-files.sh

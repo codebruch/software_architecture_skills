@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: reviews-orderdesk
+expected_outcome: |
+  A scored findings table for the orderdesk sample service, each finding checked against the code,
+  with the serious security problems raised up front, ending with a request for the user to choose
+  which improvements to pursue. No future-state diagrams or plan before the user has chosen.
+context:
+  scaffold_script: place-files.sh

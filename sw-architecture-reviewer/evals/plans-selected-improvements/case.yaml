@@ -1,0 +1,9 @@
+schema_version: "1.1"
+name: plans-selected-improvements
+expected_outcome: |
+  A complete review saved to docs/architecture/review.md: the full findings table with the two
+  selected items marked, future-state diagrams for those two only, and a phased plan that begins by
+  pinning create_order with characterization tests (it has none), with validation and rollback per
+  phase and the unselected security findings recorded as accepted risk. No source code is changed.
+context:
+  scaffold_script: place-files.sh
