@@ -72,6 +72,9 @@ State the assumption behind each score in one short clause, and be explicit when
 
 | # | Rung | Bottleneck (file:line) | Optimization | Impact | Risk | Cost | Reasoning |
 |---|------|------------------------|--------------|--------|------|------|-----------|
+| 1 | 2 — algorithm | `reports.py:38` nested scan, 97% of wall time (cProfile, 20k rows) | Aggregate in one pass with a dict keyed by customer | High (~100×, measured on a prototype) | Low | Low | Output identical on the benchmark data; no schema change. |
+
+Give the rung by number and name in its own column, as in the example row. It is what lets the reader see at a glance that a cheaper rung was tried before a more expensive one.
 
 ### Step 4 — Let the user choose
 
