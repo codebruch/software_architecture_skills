@@ -65,12 +65,13 @@ def test_partial_refund_leaves_order_open(orders_db, frozen_clock, fake_stripe):
 ...and proves isolation: the suite passes with the real `DATABASE_URL` unset, and the guard rejects any target the harness didn't create itself (a `localhost` check alone isn't trusted — it could be a tunnel to a real database). It also proves the alarm rings: a deliberate change to each pinned function turns a test red before being reverted.
 
 ### `sw-architecture-reviewer`
-Reads architecture documents (typically the writer's output) and proposes improvements across four dimensions:
+Reads architecture documents (typically the writer's output) and proposes improvements across five dimensions:
 
 - **Simplicity** — kill over-engineering, shrink fat functions, drop dead config.
 - **Testability** — separate pure logic from I/O so it can be tested without a stack.
 - **Robustness** — input validation, fallbacks, safe failure, memory/race-condition risks.
 - **Observability** — OpenTelemetry traces, structured logging, switchable debug mode.
+- **Security** — authentication and authorization at every trust boundary, untrusted input kept away from queries/commands/templates, secrets out of code and logs, least-privilege credentials. An architecture-level pass, not a penetration test or dependency audit.
 
 It checks each finding against the code (the docs say where to look; the code says whether it's true), scores **benefit**, **risk**, and **cost**, then lets the user select which to pursue. Only for the selected items it draws the future-state architecture (runtime, source code, sequence diagrams) and produces a phased implementation plan with validation and rollback per phase — opening with a characterization-test phase when the code to be changed is untested. The review is saved to `docs/architecture/review.md` for the visualizer.
 

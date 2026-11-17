@@ -1,6 +1,6 @@
 ---
 name: sw-architecture-reviewer
-description: Read architecture documents of an existing codebase, identify improvements across simplicity / testability / robustness / observability, verify them against the code, score each by benefit, risk and cost, let the user pick which to pursue, then draw the proposed future-state architecture and produce an implementation plan. Use when the user asks to review, audit, improve, or modernize the architecture of an existing codebase based on its architecture docs.
+description: Read architecture documents of an existing codebase, identify improvements across simplicity / testability / robustness / observability / security, verify them against the code, score each by benefit, risk and cost, let the user pick which to pursue, then draw the proposed future-state architecture and produce an implementation plan. Use when the user asks to review, audit, improve, or modernize the architecture of an existing codebase based on its architecture docs.
 ---
 
 # Architecture Reviewer
@@ -21,7 +21,7 @@ Work through these steps in order. Do not skip the user-selection step — the l
 
 Read every supplied document end-to-end before writing anything. Build a mental model of: components, data flow, external dependencies, hotspot functions from the complexity table, and the important sequences.
 
-### Step 2 — Identify improvements across four dimensions
+### Step 2 — Identify improvements across five dimensions
 
 Find concrete, specific improvements. Generic advice is worthless here — every suggestion must reference a specific component, function, or flow from the docs.
 
@@ -31,6 +31,9 @@ Work through each dimension. See [dimensions.md](dimensions.md) for what to look
 2. **Testability** — tangled concerns (e.g., business logic mixed with I/O), hard-to-mock dependencies, hidden global state, untestable singletons.
 3. **Robustness** — missing input validation, no fallbacks, crashes that leak stack traces to users, suspected memory leaks, suspected race conditions, unbounded queues/caches, long-running process risks.
 4. **Observability** — silent failures, missing structured logging, no tracing across service boundaries, no way to toggle debug detail at runtime.
+5. **Security** — entry points with no authentication or authorization check, untrusted input reaching a query/command/template, secrets in code or logs, over-privileged credentials, sensitive data crossing a boundary unprotected.
+
+For security, start from the runtime diagram: every arrow that begins at an actor or an external system crosses a **trust boundary**, and each one needs an answer to "who is this, are they allowed, and is what they sent safe to use?". This is an architecture-level review, not a penetration test or a dependency audit — say so in the findings, so an empty security section isn't read as a clean bill of health.
 
 Aim for 2–6 improvements *per dimension* where the docs support them. Don't pad — if a dimension is already strong, say so and move on.
 
@@ -53,13 +56,15 @@ Present the findings as a grouped table:
 
 Evidence is the `file:line` plus `confirmed` or `inferred`.
 
+Security findings get two extra rules. **Cite, don't reproduce**: point to where a secret or a hole is, never copy the secret's value or write a working exploit into the table or the saved review. And **don't let a serious one wait for the menu**: a confirmed finding that an untrusted actor could exploit today (an unauthenticated admin route, a live credential in the repo, an injectable query on a public endpoint) is called out to the user at the top of the findings, before the table, whatever they go on to select.
+
 ### Step 4 — Let the user choose
 
 Present the improvements as **selectable options** using the `AskUserQuestion` tool. Group sensibly — if there are many improvements, group by dimension or by risk/cost quadrant ("low risk + low cost = quick wins").
 
 Use `multiSelect: true`. Recommend the high-benefit quick wins first. Make it clear the user can pick any combination.
 
-The tool holds at most 4 questions of at most 4 options each, and option labels are only a few words, so a long findings table won't fit verbatim. Ask one question per group, label each option with its table number and a short name (`#3 Extract tax calc`), and put the benefit/risk/cost trade-off in the option description. When a group has more than four items, offer its strongest four and say that any other item can be added by number through "Other". If the tool isn't available (a non-interactive run), print the numbered table and ask for a list of numbers instead.
+The tool holds at most 4 questions of at most 4 options each, and option labels are only a few words, so a long findings table won't fit verbatim. Ask one question per group — five dimensions don't fit in four questions, so either group by quadrant or ask in two rounds — and label each option with its table number and a short name (`#3 Extract tax calc`), and put the benefit/risk/cost trade-off in the option description. When a group has more than four items, offer its strongest four and say that any other item can be added by number through "Other". If the tool isn't available (a non-interactive run), print the numbered table and ask for a list of numbers instead.
 
 Do not proceed to Step 5 until the user has chosen.
 
@@ -68,13 +73,13 @@ Do not proceed to Step 5 until the user has chosen.
 Only for the improvements the user selected, draw the *target* architecture. Produce all three diagram types below in ASCII (use mermaid only if the user asks for it). At least one of each.
 
 #### 5a. Runtime architecture
-How components will interact at runtime after the changes. Show processes, actors (end users, external systems), and data flow with labeled arrows (HTTP, gRPC, SQL, queue topic, etc.). Mark new or changed elements clearly (e.g., `[NEW]`, `[CHANGED]`).
+How components will interact at runtime after the changes. Show processes, actors (end users, external systems), and data flow with labeled arrows (HTTP, gRPC, SQL, queue topic, etc.). Mark new or changed elements clearly (e.g., `[NEW]`, `[CHANGED]`). When a security improvement was selected, draw the trust boundaries and show where authentication and authorization now happen.
 
 #### 5b. Source code architecture
 How code will be organized — packages, modules, classes. **One diagram per language** in the codebase. Show dependency direction. Mark new or moved modules.
 
 #### 5c. Sequence diagrams
-For each important flow affected by the chosen improvements, draw an ASCII sequence diagram. **Actors on the left must include end users or external systems** where applicable. Show the *new* sequence with any added validation, fallback, tracing, or logging steps visible.
+For each important flow affected by the chosen improvements, draw an ASCII sequence diagram. **Actors on the left must include end users or external systems** where applicable. Show the *new* sequence with any added validation, authentication/authorization, fallback, tracing, or logging steps visible.
 
 For each diagram, add a one-line caption naming which selected improvements it reflects.
 
@@ -98,7 +103,7 @@ Produce a phased plan. Structure:
 
 **End with:**
 - A short list of open questions the user needs to answer before work starts.
-- A note on what was *not* selected and remains as known debt.
+- A note on what was *not* selected and remains as known debt. Unselected security findings are listed separately as **accepted risk**, each with what an attacker could do — debt the user chose knowingly, not debt that scrolled past.
 
 ### Step 7 — Save the review
 

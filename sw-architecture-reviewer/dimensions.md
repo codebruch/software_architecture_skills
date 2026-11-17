@@ -103,6 +103,58 @@ What to look for in each dimension, with concrete patterns and anti-patterns. Us
 - Add a runtime-switchable log level (env var, signal handler, or admin endpoint).
 - Add a `/debug` or `/health` endpoint exposing build info, config snapshot, dependency health.
 
+## 5. Security
+
+**Principle:** nothing from outside a trust boundary is believed or obeyed until it has been authenticated, authorized, and validated; every component holds the least privilege and the fewest secrets it can work with.
+
+Find the trust boundaries first. On the runtime diagram, every arrow that starts at an actor (end user, admin, operator) or an external system crosses one; so does every arrow between components that run with different privileges or belong to different tenants. Walk each boundary and ask the questions below. This overlaps with Robustness on input validation — robustness asks "does bad input fail safely?", security asks "what can someone who *wants* to break it do?".
+
+**Look for:**
+
+*Authentication and authorization:*
+- Entry points (routes, consumers, admin/debug endpoints, scheduled-job triggers) reachable with no authentication, or behind a check that lives only in the UI or the gateway.
+- Authorization that checks "is logged in" but not "may act on *this* object" — handlers that load a record by an id from the request without checking ownership or tenant.
+- Authorization scattered inline through handlers instead of enforced at one layer, so each new endpoint has to remember it.
+- Internal service-to-service calls that trust any caller on the network.
+- Home-grown session, token, password-hashing, or crypto code where a vetted library exists.
+
+*Untrusted input reaching an interpreter:*
+- SQL, shell commands, templates, file paths, URLs for outbound requests, or deserializers built from request data by string concatenation or passed through unchecked (injection, path traversal, server-side request forgery, unsafe deserialization).
+- File uploads stored or served without type, size, and location constraints.
+- Messages from a queue or webhook treated as trusted because they arrive "from inside" — check where they originate and whether the signature is verified.
+
+*Secrets and credentials:*
+- Secrets in source, config files, Dockerfiles, CI definitions, or IaC committed to the repo; default or shared credentials.
+- One credential shared by every component, or an application database user with owner/superuser rights.
+- Secrets, tokens, or personal data written to logs, traces, error messages, or metrics labels.
+- No way to rotate a secret without a redeploy or downtime.
+
+*Data protection:*
+- Sensitive data (credentials, personal data, payment data) crossing a boundary in plaintext, or stored unencrypted where the threat model expects encryption.
+- Responses that return whole internal records when the caller needs three fields.
+- No tenant isolation in the data layer of a multi-tenant system — the tenant filter is each query's responsibility.
+
+*Exposure and containment:*
+- Debug, metrics, health, or admin endpoints listening on the public interface.
+- No rate limiting or lockout on login, password reset, or other costly/abusable endpoints.
+- A component that, if compromised, can reach everything (flat network, broad IAM role, container running as root).
+- Security-relevant actions (login, permission change, data export, admin operations) leaving no audit record.
+- Dependencies or base images pinned to versions with known vulnerabilities, or not pinned at all — note it and recommend a dependency audit rather than attempting one here.
+
+**Concrete improvements:**
+- Enforce authentication and authorization in one place (middleware, a policy layer, a gateway *plus* a service-side check) that every entry point passes through by default.
+- Add object-level and tenant-level checks in the service or repository layer, where they can't be skipped.
+- Replace string-built queries/commands with parameterized queries and argument arrays; allow-list paths and outbound hosts.
+- Move secrets to a secret manager or injected environment; give each component its own least-privilege credential; scrub secrets and personal data from logs.
+- Verify signatures on webhooks and inter-service messages; use mutual TLS or signed tokens between services.
+- Bind debug/admin endpoints to an internal interface or put them behind authentication; add rate limits to authentication flows.
+- Add an audit log for security-relevant actions (ties in with Observability).
+
+**Handling what you find:**
+- Cite the location of a secret or a hole (`file:line`); never copy a secret's value or write a working exploit into the findings or the saved review.
+- A credential found in the repo is compromised whether or not the code is fixed — the improvement includes rotating it, and it stays in git history until rewritten.
+- A confirmed, externally exploitable finding is raised with the user immediately rather than left as one row among twenty.
+
 ---
 
 # Benefit/risk/cost rubric
@@ -113,7 +165,7 @@ Score every proposed improvement on all three axes. State the assumption in one 
 
 | Level | When to assign |
 |-------|----------------|
-| **High** | Removes a failure mode that loses data, takes the service down, or goes unnoticed in production; or untangles a high-churn hotspot that most changes have to pass through; or unblocks testing of a core flow. |
+| **High** | Removes a failure mode that loses data, takes the service down, or goes unnoticed in production; or closes a hole an untrusted actor can reach (missing authentication or authorization, injection, an exposed secret); or untangles a high-churn hotspot that most changes have to pass through; or unblocks testing of a core flow. |
 | **Medium** | Makes a regularly-touched area noticeably easier to change, test, or debug; closes a failure mode that is contained or rare. |
 | **Low** | Tidier, but in code that rarely changes and rarely fails. Nobody would notice next quarter. |
 
@@ -143,3 +195,5 @@ Benefit gates everything: a **Low benefit** item is deferred whatever its risk a
 - **Low risk + High cost** → worth doing but plan it; good interns/onboarding work.
 - **High risk + Low cost** → only do with explicit user sign-off and a clear rollback.
 - **High risk + High cost** → flag as needing its own design doc before any work; consider whether it's really necessary.
+
+Security changes need one more check when scoring risk: tightening authentication, authorization, or validation *is meant* to reject requests that used to succeed, so legitimate callers relying on the loose behavior will break. Plan those with a log-only or report-only stage first where the system allows it, then enforce.

@@ -44,7 +44,7 @@ Measure the *after* code with the **same method the before baseline used** — s
 
 When a function was split, renamed, or moved, compare the **family**, not the survivor: the original function before, against everything its logic became after (the slimmed function plus each extracted piece, wherever it now lives). Report the family's total and its maximum. Comparing only the same-named function always shows a drop, because the rest of the complexity is now in rows you didn't count.
 
-See [comparison-guide.md](comparison-guide.md) for what metric to compare per dimension — complexity reduction is the headline for simplicity/testability, but robustness/observability improvements *add* code on purpose, so measure the right thing (see below).
+See [comparison-guide.md](comparison-guide.md) for what metric to compare per dimension — complexity reduction is the headline for simplicity/testability, but robustness/observability/security improvements *add* code on purpose, so measure the right thing (see below).
 
 ### Step 3 — Build a before/after panel per improvement
 
@@ -66,7 +66,7 @@ Compare the affected functions/components, before vs after, with an explicit del
 |-----------|----------|--------------------|---------------------------|---|-------|
 
 - Show the delta and, for the headline metric, the percent change.
-- If complexity went **up** by design (added validation/fallback/observability), say so and show the metric that *did* improve instead (see [comparison-guide.md](comparison-guide.md)) — e.g., "cyclomatic +3, but 4 previously-unhandled inputs now rejected at the boundary".
+- If complexity went **up** by design (added validation/fallback/observability/access checks), say so and show the metric that *did* improve instead (see [comparison-guide.md](comparison-guide.md)) — e.g., "cyclomatic +3, but 4 previously-unhandled inputs now rejected at the boundary".
 
 **For a performance optimization**, the table is a benchmark comparison instead: re-run the optimizer's recorded command on the recorded workload, with the same [hygiene](comparison-guide.md#performance-items) as the baseline, and show metric, before, after, change, and run-to-run spread. If the original workload or command can't be reproduced, re-measure *both* sides the same way (check out the baseline commit for the before number) rather than comparing a new measurement with an old one.
 
@@ -78,9 +78,9 @@ One or two lines: did this improvement achieve its intent? Reference the origina
 After the per-improvement panels:
 
 - **Aggregate complexity delta** — across all touched functions, before vs after: total LOC, total cyclomatic, the maximum single-function cyclomatic, and how many functions sit above the hotspot threshold (CC > 10). One summary table. Don't headline the *average*: splitting one function into three lowers the average even when nothing got simpler.
-- **Dimension scorecard** — for each of the four dimensions (simplicity, testability, robustness, observability), a one-line before/after statement. Add a performance line (goal metric before → after) when optimizer items are in scope.
+- **Dimension scorecard** — for each of the reviewer's dimensions (simplicity, testability, robustness, observability, security), a one-line before/after statement. Add a performance line (goal metric before → after) when optimizer items are in scope.
 - **Behavior preservation** — test-suite result, plus any assertions, tests, or snapshots that changed during the work and whether each was intended.
-- **Outstanding debt** — improvements that were Not done or Partial, carried forward with their original scores from the plan's table.
+- **Outstanding debt** — improvements that were Not done or Partial, carried forward with their original scores from the plan's table. Security items that are Not done or Partial go first, each with what remains exposed.
 - **Regressions or surprises** — anything that got worse, or any complexity that moved somewhere else rather than disappearing (e.g., a fat function split into three that are each fine, but a new orchestrator now carries the branching).
 
 ## Anti-patterns to avoid
@@ -91,4 +91,4 @@ After the per-improvement panels:
 - **Hiding complexity that just moved.** Splitting a function isn't a win if the complexity reappeared in a new coordinator. Track where it went.
 - **Scoring structure while ignoring behavior.** A refactor that halves complexity and quietly re-blesses a dozen snapshots changed what the system does. Report that next to the complexity win, not instead of it.
 - **Comparing a new benchmark with an old number.** Different machine, data, or command, and the "speedup" is an artifact. Same command on both sides or it isn't a comparison.
-- **Treating added code as failure.** Robustness and observability improvements raise LOC/complexity on purpose. Judge them by the right metric, not by raw line count.
+- **Treating added code as failure.** Robustness, observability, and security improvements raise LOC/complexity on purpose. Judge them by the right metric, not by raw line count.
