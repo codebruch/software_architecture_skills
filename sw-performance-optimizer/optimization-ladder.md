@@ -29,17 +29,62 @@ Pick the tool that matches the runtime, run it against a **representative worklo
 
 If none of these can be run (no environment, no representative data, no way to drive load), fall back to static reasoning over the architecture's sequence diagrams and complexity map — and **label every estimate as such.** A static guess is a hypothesis to confirm with a profiler, not a result.
 
+### What to measure for which goal
+
+The profiler has to answer the question the goal asks. Most of the tools above default to CPU time, and a CPU profile of a service that is waiting on I/O shows an idle process and nothing useful.
+
+| Goal | What to measure | How |
+|------|-----------------|-----|
+| Request latency (p50/p99) | **Wall-clock** time per stage, including waits | Distributed traces / spans, wall-clock sampling (`py-spy --idle`, async-profiler `-e wall`, Go `trace` + block/mutex profiles), DB time via `pg_stat_statements` / slow-query log. The runtime and sequence diagrams tell you which hops to time. |
+| Tail latency (p99 ≫ p50) | What differs on the slow requests | Compare slow traces with typical ones: lock contention, GC pauses, queueing behind a saturated pool, cold caches, one slow downstream. Averages hide all of these. |
+| Throughput | Which resource saturates first | Per-resource utilization, saturation, and errors (CPU, memory, disk, network, connection pools, worker/thread pools, queue depth) under increasing load. |
+| CPU cost | On-CPU time by function | CPU flame graph; self-time ranking. |
+| Memory footprint | What is retained, and who allocates | Heap profiler (`memray`, `pprof` heap, JFR, heap snapshots); allocation rate for GC pressure. Distinguish a leak (grows without bound) from a high-water mark. |
+| Batch job duration | Wall-clock per phase, then CPU or I/O within the dominant phase | Phase timers first, then the matching profiler on the slowest phase. |
+
+### Measuring safely
+
+Measurement can do damage. The same care the rest of the pipeline takes with real data applies here.
+
+- **Drive load only at an environment you own** — local, a container, a dedicated test or staging instance. Don't load-test production or a shared environment unless the user explicitly asks for that and names the target.
+- **`EXPLAIN ANALYZE` executes the statement.** On an `INSERT`, `UPDATE`, or `DELETE` it performs the write. Use plain `EXPLAIN` for writes, or wrap it in a transaction and roll back. On any production database, even a read-only `EXPLAIN ANALYZE` of a slow query adds real load.
+- **Attaching a profiler to a live production process** is a decision for the user, not a default: it needs elevated privileges, adds overhead, and can pause the process. Prefer reproducing the workload locally; if production is the only place the problem shows, propose the exact command and let the user run it.
+- **Use production-shaped data, not production data**, unless the user provides it. Size and distribution are what matter for performance; real records aren't needed.
+
+### Benchmark hygiene
+
+A single timing is an anecdote. Before quoting a baseline or a win:
+
+- **Warm up** (JIT, caches, connection pools) before measuring, unless cold start is the thing being optimized.
+- **Repeat** — at least 5 runs, more for short ones — and report the median with the spread (min–max or standard deviation). Use the ecosystem's benchmark harness where one exists (`hyperfine`, `go test -bench` + `benchstat`, `pytest-benchmark`, JMH, `criterion`) rather than a hand-rolled timer.
+- **Hold everything else still**: same machine, same data, same build flags, same concurrency, nothing else heavy running. Build in release/optimized mode — profiling a debug build finds debug-build bottlenecks.
+- **Don't claim a win inside the noise.** If runs vary by ±5%, a 3% improvement isn't a result.
+- **Record the exact command** and the commit, so the after-measurement repeats the before-measurement and not something like it.
+
+### Free wins: check before climbing
+
+Some slowness is a setting, not a design. These cost minutes to check and can dwarf a week of code changes:
+
+- A debug or unoptimized build, or a development server, running in production.
+- Verbose/debug logging or tracing at 100% sampling on the hot path.
+- Connection-pool, worker, or thread-pool sizes left at a tiny default (or set far too high, so the database thrashes).
+- Missing HTTP keep-alive, compression, or connection reuse between services.
+- An old runtime or library version with a known performance fix.
+- Resource limits (container CPU/memory) that throttle the process well below what the host has.
+
+Report any that apply as their own items, rung 3, usually low cost.
+
 ### What to capture
 
-- A **baseline number** for the goal metric: p50/p99 latency, throughput (req/s, rows/s), CPU time, peak RSS, allocation rate, or cloud cost — whichever the user is optimizing.
+- A **baseline number** for the goal metric: p50/p99 latency, throughput (req/s, rows/s), CPU time, peak RSS, allocation rate, or cloud cost — whichever the user is optimizing — with its spread across runs.
 - A **ranked bottleneck list**: "X% of wall time / CPU / allocations in `file:func`", sorted by cost, each tagged with how it was obtained.
-- The **workload** used, so the measurement is reproducible and the after-numbers are comparable.
+- The **workload**, the **exact command**, and the **commit**, so the measurement is reproducible and the after-numbers are comparable.
 
 ---
 
 ## Rung 2 — Algorithms & data structures
 
-The biggest wins live here, because complexity class dominates everything at scale. Replacing an **O(n²)** algorithm with **O(n log n)** is a ~2× win at n=20, but at n=1,000,000 it's roughly **50,000×** — no amount of hot-loop tuning or language rewrite competes with that. Fix the complexity class before anything below it.
+The biggest wins live here, because complexity class dominates everything at scale. Replacing an **O(n²)** algorithm with **O(n log n)** is a ~5× win at n=20, but at n=1,000,000 it's roughly **50,000×** — no amount of hot-loop tuning or language rewrite competes with that. Fix the complexity class before anything below it.
 
 ### Patterns
 
@@ -161,6 +206,10 @@ Run through this before handing the plan to the user.
 - [ ] Every bottleneck is backed by a profiler run (tool + workload named) **or** explicitly marked estimated/static.
 - [ ] A baseline number exists for the goal metric, and the workload is stated so it's reproducible.
 - [ ] Bottlenecks are ranked by their share of runtime/cost, not by gut feel.
+- [ ] The kind of measurement matches the goal (wall-clock/traces for latency, heap for memory, saturation for throughput) — not a CPU profile by default.
+- [ ] The baseline comes from repeated, warmed-up runs and states its spread; no claimed win is smaller than the noise.
+- [ ] Nothing was load-tested, profiled, or `EXPLAIN ANALYZE`d against production or shared data without the user's explicit go-ahead.
+- [ ] Free wins (build mode, logging level, pool sizes, resource limits) were checked before proposing code changes.
 
 ### Ladder discipline
 - [ ] Each optimization names its rung and cites the bottleneck (file:line + measured/estimated cost) it addresses.
@@ -179,3 +228,5 @@ Run through this before handing the plan to the user.
 - [ ] Re-measurement between phases is built in (optimizations interact).
 - [ ] Pushdown proposals list their concrete risks (FFI/serialization/build/debug/ops/consistency).
 - [ ] Unselected items are recorded as performance debt with their impact/risk/cost.
+- [ ] Paths to be optimized have tests that would catch a changed output, or the plan adds them first.
+- [ ] Baseline, workload, exact command, commit, scored table, and plan are saved to `docs/architecture/performance.md`.

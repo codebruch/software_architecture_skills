@@ -1,6 +1,6 @@
 # Improvement dimensions
 
-What to look for in each dimension, with concrete patterns and anti-patterns. Use the function complexity table from the input docs as your primary hunting ground — high-LOC / high-complexity functions are usually where multiple dimensions fail at once.
+What to look for in each dimension, with concrete patterns and anti-patterns. Use the function complexity table from the input docs as your primary hunting ground — high-LOC / high-complexity functions are usually where multiple dimensions fail at once, and the ones with high churn and no tests matter most. The table covers function-level problems; use the source code and runtime diagrams for the structure-level ones.
 
 ## 1. Simplicity
 
@@ -15,7 +15,16 @@ What to look for in each dimension, with concrete patterns and anti-patterns. Us
 - Generic frameworks built in-house when a library or stdlib would do.
 - Dead code paths and feature flags that have been "on" or "off" everywhere for months.
 
+*Structure-level (from the source code and runtime diagrams):*
+- Dependency cycles between packages/modules.
+- Layer violations — arrows that skip a layer or point the wrong way (a handler importing a repository directly, a domain package importing the HTTP framework).
+- A module everything depends on and that depends on everything (a "common" or "core" that became a hub).
+- Two services reading and writing the same tables, so neither can change its schema alone.
+- The same logic implemented separately in two components or two languages.
+
 **Concrete improvements:**
+- Break a dependency cycle by moving the shared piece down a layer or inverting one dependency behind an interface.
+- Give shared data a single owning component; other components go through it.
 - Split a fat function into named sub-functions along its natural seams.
 - Inline a single-use abstraction.
 - Delete unused configuration / feature flags.
@@ -55,6 +64,9 @@ What to look for in each dimension, with concrete patterns and anti-patterns. Us
 - `catch` blocks that swallow errors silently.
 - Retries without backoff or with no upper bound.
 - No circuit breakers in front of flaky downstreams.
+- Outbound calls (HTTP, DB, queue) with no timeout — one slow dependency stalls every caller.
+- Retried or redelivered operations that aren't idempotent (a consumer that double-charges when a message is delivered twice).
+- Dual writes with no atomicity: a sequence diagram that shows "write the DB, then publish the event" (or call a second service) loses or duplicates one side when the process dies in between.
 
 *Long-running concerns:*
 - Unbounded in-memory caches / queues / maps.
@@ -68,6 +80,8 @@ What to look for in each dimension, with concrete patterns and anti-patterns. Us
 - Introduce a fallback path (cached value, default, degraded mode) for non-critical dependencies.
 - Bound caches with a size limit and eviction policy.
 - Add cancellation contexts / timeouts to long-running operations.
+- Make consumers and retried operations idempotent (idempotency key, upsert, dedup table).
+- Replace a dual write with a transactional outbox, or make the second write recoverable.
 - Replace shared mutable state with message passing, immutable copies, or explicit locks.
 
 ## 4. Observability
@@ -91,16 +105,26 @@ What to look for in each dimension, with concrete patterns and anti-patterns. Us
 
 ---
 
-# Risk/cost rubric
+# Benefit/risk/cost rubric
 
-Score every proposed improvement with both axes. State the assumption in one short clause.
+Score every proposed improvement on all three axes. State the assumption in one short clause.
+
+## Benefit — how much real pain the change removes
+
+| Level | When to assign |
+|-------|----------------|
+| **High** | Removes a failure mode that loses data, takes the service down, or goes unnoticed in production; or untangles a high-churn hotspot that most changes have to pass through; or unblocks testing of a core flow. |
+| **Medium** | Makes a regularly-touched area noticeably easier to change, test, or debug; closes a failure mode that is contained or rare. |
+| **Low** | Tidier, but in code that rarely changes and rarely fails. Nobody would notice next quarter. |
+
+Anchor benefit in evidence from the docs and code — churn, complexity, missing tests, what the failure would cost — not in how unpleasant the code looks.
 
 ## Risk — chance the change breaks something currently working
 
 | Level | When to assign |
 |-------|----------------|
 | **Low** | Additive change. New code path; existing code untouched or only renamed. Examples: adding a log line, adding a metric, extracting a pure function and calling it from the same place. |
-| **Medium** | Modifies an existing code path that has test coverage, or touches a non-critical path. Examples: introducing a validation layer, adding retries, splitting a function. |
+| **Medium** | Modifies an existing code path that has test coverage (see the complexity map's Tests column), or touches a non-critical path. Examples: introducing a validation layer, adding retries, splitting a function. |
 | **High** | Modifies a critical path with thin tests; changes data shapes; touches concurrency, persistence, or auth; coordinated changes across multiple services. Examples: introducing locking, changing a schema, refactoring an auth flow, replacing a framework. |
 
 ## Cost — engineering effort to implement and roll out
@@ -112,6 +136,8 @@ Score every proposed improvement with both axes. State the assumption in one sho
 | **High** | Multi-week effort, or requires coordination across teams / services. Schema migration, framework swap, observability rollout across many services. |
 
 ## Quadrant guide for recommending
+
+Benefit gates everything: a **Low benefit** item is deferred whatever its risk and cost, and listed as optional. For the rest:
 
 - **Low risk + Low cost** → "quick wins", recommend first.
 - **Low risk + High cost** → worth doing but plan it; good interns/onboarding work.

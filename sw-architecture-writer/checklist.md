@@ -20,6 +20,7 @@ Run through this before handing the architecture write-up to the user.
 
 - [ ] Scope of the table is stated (whole repo, top-N, specific module).
 - [ ] LOC and complexity numbers state how they were measured (tool name, or "counted by hand").
+- [ ] Churn and Tests columns are filled in (or the reason they're omitted is stated).
 - [ ] Trivial functions (getters, one-liners, generated code) are excluded.
 - [ ] Hotspots are flagged in the Notes column, not buried.
 
@@ -30,7 +31,13 @@ Run through this before handing the architecture write-up to the user.
 - [ ] ASCII is readable in monospace; no broken box-drawing characters.
 - [ ] One concept per diagram — don't merge runtime and source-code views into a single picture.
 
+## Handoff
+
+- [ ] The write-up is saved to a file (`docs/architecture/architecture.md` unless the repo or user says otherwise), not only printed in chat.
+- [ ] The file header records the commit and date, the scope read, and the exact complexity-measurement command.
+
 ## Honesty
 
+- [ ] For a large codebase, what was read in depth versus skimmed is stated.
 - [ ] Things that couldn't be determined from the code are called out, not guessed silently.
 - [ ] If a required deliverable category genuinely doesn't apply, that is stated explicitly with the reason.

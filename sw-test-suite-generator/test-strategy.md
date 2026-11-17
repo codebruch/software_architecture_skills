@@ -29,11 +29,11 @@ Every external boundary the runtime diagram shows gets exactly one of two treatm
 
 | Boundary | Local double | Dedicated test persistence | Notes / trade-off |
 |----------|--------------|----------------------------|-------------------|
-| Relational DB (Postgres/MySQL) | repository fake backed by a dict/list; or SQLite/H2 in-memory | **Testcontainers** real engine; or ephemeral schema/db created+dropped per run; or open a txn per test and **roll back** | Fakes are fast but miss real SQL, constraints, and migrations. Prefer a container or rollback-per-test when the behavior depends on the engine. Rollback-per-test gives perfect isolation and speed when the schema already exists. |
+| Relational DB (Postgres/MySQL) | repository fake backed by a dict/list; or SQLite/H2 in-memory | **Testcontainers** real engine; or ephemeral schema/db created+dropped per run; or open a txn per test and **roll back** | Fakes are fast but miss real SQL, constraints, and migrations. Prefer a container or rollback-per-test when the behavior depends on the engine. Rollback-per-test gives perfect isolation and speed when the schema already exists. SQLite/H2 standing in for Postgres/MySQL pins the *substitute's* behavior where dialects differ (types, collation, constraint timing, JSON, locking) — fine for logic above the repository, wrong for pinning queries. |
 | NoSQL / document store | in-memory map keyed like the store | Testcontainers (Mongo, etc.); or a throwaway namespace/collection | Match the consistency model you actually rely on. |
 | Cache (Redis/Memcached) | `fakeredis`/in-memory map | Testcontainers Redis on an ephemeral db index | A cache double is usually enough; use a real one only when testing eviction/TTL behavior. |
 | Message queue / broker (Kafka, SQS, Rabbit) | in-memory publisher/consumer capturing messages | Testcontainers broker; or an embedded broker | For *characterizing* what gets published, an in-memory capture you can assert on is usually better than a real broker. |
-| Third-party HTTP API | stub/mock server returning **recorded fixtures**; VCR-style cassettes (`vcrpy`, `webmock`, WireMock, `nock`, `responses`) | — (never hit the real API) | Record once against the real API in a controlled setting, then replay offline. Scrub secrets from cassettes. Pin to the recorded response so contract drift trips the alarm. |
+| Third-party HTTP API | stub/mock server returning **recorded fixtures**; VCR-style cassettes (`vcrpy`, `webmock`, WireMock, `nock`, `responses`) | — (never hit the real API) | Prefer cassettes or fixtures the repo already has. Otherwise build the stub's responses from the client code and the provider's documented payloads, and mark them as synthetic. Recording against the live API is the user's call, never a default: it needs their explicit go-ahead, a sandbox/test account, and read-only or side-effect-free calls. Scrub secrets from cassettes. |
 | Filesystem / object store | in-memory FS; temp dir the test creates and deletes (`tmp_path`, `t.TempDir()`) | MinIO/localstack via Testcontainers for S3-like APIs | Use the framework's temp-dir fixture; never write to a fixed real path. |
 | **System clock** | inject a clock / freeze time (`freezegun`, `time-machine`, `Clock` interface, `jest.useFakeTimers`) | — | Time is persistence's quiet cousin: uncontrolled `now()` makes assertions nondeterministic. Always freeze. |
 | **Randomness / UUIDs** | seed the RNG; inject an id generator | — | A test that asserts on a random UUID is flaky by construction. Seed or inject. |
@@ -44,9 +44,12 @@ Every external boundary the runtime diagram shows gets exactly one of two treatm
 Convenience is how real databases get hit. Engineer it out:
 
 - **Inject the target, don't discover it.** The test persistence DSN/URL/base-URL comes from the fixture, not from the same env var production reads. Tests should not be able to pick up a real connection string by accident.
-- **Refuse non-test targets.** The harness asserts the target looks like a test one (host is `localhost`/container, db name carries a `test_` prefix, base URL points at the stub) and **aborts the run** otherwise. A missing test target is a hard failure, never a silent fallback to the default/real one.
+- **Own the target, don't just recognize it.** The strongest guarantee is that the harness only ever connects to something it created in this run: the container it started, a database or schema with a per-run random name it issued `CREATE` for, the stub server it bound to a free port. A target the harness made cannot be a real one.
+- **Refuse non-test targets.** As a backstop, the harness asserts the target looks like a test one (db name carries a `test_` prefix or the per-run name, base URL points at the stub) and **aborts the run** otherwise. A missing test target is a hard failure, never a silent fallback to the default/real one.
+- **`localhost` is not proof.** A local port can be an SSH tunnel, a `kubectl port-forward`, or a cloud SQL proxy to a real database, or a developer's local database holding data they care about. A hostname check alone passes all of these. Never rely on it as the only guard.
+- **Destructive setup is scoped to what the harness created.** `DROP`, `TRUNCATE`, and "reset schema" run only against the per-run database/schema, never against whatever the connection string happens to point at.
 - **No real client by default.** Construct clients to real boundaries only through the test seam. A test that builds a production client is the smell to catch in review.
-- **Prove it (Step 6).** Run with real credentials/DSN unset and show the suite still passes; point the guard at a non-test host and show it refuses. State how you verified.
+- **Prove it (Step 6).** Run with real credentials/DSN unset and show the suite still passes; hand the guard a target the harness didn't create and show it refuses. State how you verified.
 
 ---
 
@@ -115,7 +118,9 @@ Run through this before handing the suite to the user.
 - [ ] Every boundary from the runtime diagram is treated as a local double **or** a dedicated test persistence — none left wired to a real target.
 - [ ] The harness is **fail-closed**: it refuses to run against a non-test target and never silently falls back to the default/real one.
 - [ ] Test targets are **injected** by fixtures, not discovered from the same config production reads.
-- [ ] Isolation was **proven**, not asserted: ran with real credentials/DSN unset, and the guard rejects a non-test host. How it was verified is stated.
+- [ ] Isolation was **proven**, not asserted: ran with real credentials/DSN unset, and the guard rejects a target the harness didn't create. How it was verified is stated.
+- [ ] The guard does not rest on a hostname check alone (`localhost` can be a tunnel to a real database); destructive setup only touches what the harness created.
+- [ ] No live third-party API was called to record fixtures without the user's explicit go-ahead.
 
 ### Fidelity to current behavior
 - [ ] Assertions encode **actual** captured behavior, generated from real isolated runs — not the idealized/should-be behavior.
@@ -125,7 +130,7 @@ Run through this before handing the suite to the user.
 ### Coverage that earns its keep
 - [ ] Hotspot functions from the complexity map are pinned with unit tests, branch by branch.
 - [ ] Important flows from the sequence diagrams are pinned with integration tests against the isolated persistence.
-- [ ] Scope was chosen by the user via `AskUserQuestion`, aimed at what upcoming changes will touch — not a blind coverage-% grab.
+- [ ] Scope was chosen by the user via `AskUserQuestion` **before** behavior was captured, aimed at what upcoming changes will touch — not a blind coverage-% grab.
 - [ ] A coverage map ties each test back to the flow or `file:line` it characterizes.
 
 ### Determinism & quality
@@ -133,7 +138,11 @@ Run through this before handing the suite to the user.
 - [ ] State is isolated between tests (rollback/truncate/fresh container or schema); no order dependence.
 - [ ] Tests are named for the behavior they pin and follow arrange–act–assert.
 - [ ] The suite was **run and is green**; no assertion was weakened just to force a pass.
+- [ ] The alarm was **shown to ring**: a deliberate change to each pinned hotspot/flow turned a test red, and every such change was reverted.
+- [ ] The suite gives the same verdict on repeated and shuffled runs.
 
 ### Honesty
 - [ ] Boundaries with no test seam are reported as blockers / testability findings for [[sw-architecture-reviewer]], not worked around by touching the real thing.
 - [ ] Anything that couldn't be characterized (non-runnable path, missing representative data) is called out, not faked.
+- [ ] Production code is unchanged except for seams the user approved; each seam's default preserves existing behavior.
+- [ ] The isolation table and coverage map are saved to `docs/architecture/test-coverage-map.md`.

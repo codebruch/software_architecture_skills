@@ -7,14 +7,14 @@ description: Analyze a codebase together with its architecture documents to prop
 
 You analyze an existing codebase and its architecture documents to propose **concrete, measured** performance optimizations. The single most important rule: **measure before you change anything.** You'll often find 90% of the time is spent in 5% of the code, and that hot spot is rarely the one you'd have guessed.
 
-You fit in the pipeline after [[sw-architecture-writer]] and [[sw-architecture-reviewer]]: the writer's function complexity map is your richest starting hunting ground, but the complexity table tells you where the code is *complicated*, not where it's *slow* — those are different, and only a profiler settles it.
+You fit in the pipeline after [[sw-architecture-writer]], and ideally after [[sw-test-suite-generator]] has pinned current behavior — an optimization is only a win if the outputs stay the same. You don't depend on [[sw-architecture-reviewer]]. The writer's function complexity map is your richest starting hunting ground, but the complexity table tells you where the code is *complicated*, not where it's *slow* — those are different, and only a profiler settles it.
 
 ## Inputs
 
 You need two things. Ask for whatever is missing.
 
 1. **The codebase** — you read and (where possible) run it. This is what you profile and where you confirm the actual hot paths.
-2. **The architecture documents** — typically the output of [[sw-architecture-writer]] (runtime diagram, source code diagram(s), function complexity map, sequence diagrams). These tell you the component boundaries, the data flows, and the candidate hotspots. If the user hasn't pointed you at docs, ask; if none exist, suggest running the writer skill first so you have a map.
+2. **The architecture documents** — typically the output of [[sw-architecture-writer]] (runtime diagram, source code diagram(s), function complexity map, sequence diagrams). These tell you the component boundaries, the data flows, and the candidate hotspots. Look in `docs/architecture/architecture.md` first. If nothing is there and the user hasn't pointed you at docs, ask; if none exist, suggest running the writer skill first so you have a map.
 
 You also need to know, or ask for:
 - **The performance goal** — what's slow and what "fast enough" means. Latency (p50/p99)? Throughput? CPU cost? Memory footprint? Cloud bill? "Make it faster" with no target leads to optimizing the wrong thing.
@@ -40,7 +40,10 @@ Work through these in order. Do not skip the measurement step, and do not skip t
 
 Before proposing a single change, find where the time actually goes.
 
+- **Measure the thing the goal is about.** A CPU flame graph answers "where does CPU go", which is the wrong question for a service that spends its time waiting on a database, a lock, or a downstream call. Latency goals need wall-clock or trace data; memory goals need a heap profiler; throughput goals need to know which resource saturates. See [what to measure for which goal](optimization-ladder.md#what-to-measure-for-which-goal).
 - **Profile if you possibly can.** Pick the right tool for the language (`perf`, `py-spy`, `pprof`, `async-profiler`, Chrome DevTools / a flame graph, etc. — see the [profiler table](optimization-ladder.md#profilers-by-language)). Run it against the representative workload, not a toy input. A flame graph or top-N-by-self-time list is the goal.
+- **Measure safely.** Profile and drive load against a local or dedicated test environment. Never load-test, or run statement-executing diagnostics, against production or shared data without the user's explicit go-ahead — see [measuring safely](optimization-ladder.md#measuring-safely).
+- **Make the number trustworthy.** Warm up, repeat the run, and report the spread, so that a later "improvement" can be told apart from noise — see [benchmark hygiene](optimization-ladder.md#benchmark-hygiene).
 - **If you genuinely can't run a profiler** (no runnable environment, no representative data, no way to drive load), say so explicitly and fall back to **static analysis**: trace the hot path through the architecture's sequence diagrams, inspect the complexity-map hotspots, and reason about big-O and call frequency. Mark every such finding as **estimated, not measured** — and recommend the user confirm with a profiler before investing.
 - Establish a **baseline number** for the goal metric (e.g., "p99 = 840ms", "batch job = 42min", "1.8GB RSS"). Every later claim of improvement is relative to this.
 
@@ -48,7 +51,7 @@ Output of this step: a short ranked list of the actual bottlenecks — "X% of wa
 
 ### Step 2 — Identify optimizations, climbing the ladder per bottleneck (rungs 2–5)
 
-For **each** bottleneck from Step 1, propose the cheapest effective fix. Walk the rungs in order and stop at the first that solves it:
+For **each** bottleneck from Step 1, propose the cheapest effective fix. Before climbing, rule out the [free wins](optimization-ladder.md#free-wins-check-before-climbing) — a debug build, verbose logging on the hot path, an undersized connection pool — which cost a config change rather than a code change. Then walk the rungs in order and stop at the first that solves it:
 
 - **Rung 2 — algorithms & data structures.** This is where the huge wins live. Replacing an O(n²) algorithm with O(n log n) at n=1,000,000 isn't a 2× or 10× win — it's roughly 50,000×. Look for: list scans that should be hash-map lookups (O(n)→O(1)), nested loops re-scanning data that a precomputed index/lookup table eliminates, the wrong container (use a **heap** for "smallest item repeatedly", a **tree/sorted structure** for range queries, a **set** for dedup), and expensive results recomputed in a loop that should be **memoized/cached**.
 - **Rung 3 — architectural patterns.** When the algorithm is already right but the *shape of the work* is wrong: **caching** (in-memory, Redis, HTTP caching, CDN), **batching** instead of one-item-at-a-time, **concurrency/parallelism** for independent work (async I/O, threads, processes/machines), doing work **ahead of time or lazily** (precompute vs defer), **not loading data you don't need** (pagination, projection, streaming), and **database tuning** — a missing index is the difference between milliseconds and minutes; an index *is* the "right data structure" idea applied to the DB.
@@ -74,6 +77,8 @@ State the assumption behind each score in one short clause, and be explicit when
 
 Present the optimizations as **selectable options** using the `AskUserQuestion` tool, `multiSelect: true`. Group sensibly — by rung, or by quadrant ("high impact + low risk + low cost = do these first"). Recommend the high-impact / low-risk / low-cost items first, and call out any high-risk rung-5 pushdowns as needing explicit sign-off.
 
+The tool holds at most 4 questions of at most 4 options each, with labels of a few words. Ask one question per group, label each option with its table number and a short name (`#2 Index orders.user_id`), and put the impact/risk/cost in the description. When a group has more than four items, offer its strongest four and say that others can be added by number through "Other". If the tool isn't available (a non-interactive run), print the numbered table and ask for a list of numbers instead.
+
 Do not proceed to Step 5 until the user has chosen.
 
 ### Step 5 — Optimization plan
@@ -91,7 +96,7 @@ For the selected optimizations only, produce a phased plan.
 - Optimizations included (reference the numbered items from Step 3).
 - Concrete work items at file/function level.
 - **Validation: a benchmark, not a vibe.** State the baseline number, the target, how to reproduce the measurement (same workload, same tool), and the metric to watch. An optimization with no before/after measurement is not done.
-- **Guard against regressions:** add or note a benchmark/test so the win doesn't silently rot, and confirm correctness is preserved (same outputs on the same inputs).
+- **Guard against regressions:** add or note a benchmark/test so the win doesn't silently rot, and confirm correctness is preserved (same outputs on the same inputs). If the targeted path has no tests that would catch a changed output, the phase starts by pinning it with characterization tests ([[sw-test-suite-generator]]) — before the optimization, not after.
 - Rollback: how to revert if the change loses the bet or breaks behavior.
 - Dependencies on prior phases.
 
@@ -99,6 +104,8 @@ For the selected optimizations only, produce a phased plan.
 - A note that results should be re-profiled against the original baseline once the plan is implemented (this is exactly what [[sw-refactor-visualizer]] can render as before/after).
 - Open questions the user must answer before work starts (e.g., acceptable staleness for a cache, available cores for parallelism, whether a pushdown's operational cost is acceptable).
 - What was **not** selected and remains as known performance debt, carried with its impact/risk/cost.
+
+**Save it.** Write the baseline (metric, number and spread, workload, tool, exact command, commit), the ranked bottleneck list, the full scored table with selected items marked, and the plan to `docs/architecture/performance.md`. Re-measuring after the work — by you or by [[sw-refactor-visualizer]] — is only a fair comparison if the original workload and command can be re-run exactly, and the chat they were produced in won't be around.
 
 ## Anti-patterns to avoid
 

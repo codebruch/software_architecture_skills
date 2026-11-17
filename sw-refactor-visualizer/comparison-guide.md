@@ -12,6 +12,7 @@ How to measure the before/after delta per dimension, and mermaid templates for t
 | **Testability** | cyclomatic of the extracted *pure* function + # of I/O deps in the logic path | ↓ deps, logic now isolated | # of functions now unit-testable without a DB/network/clock |
 | **Robustness** | # of unhandled inputs / failure modes now covered | ↑ coverage (LOC may rise) | inputs validated at boundary, fallback paths added, bounded caches/queues |
 | **Observability** | # of instrumented boundaries (spans, structured logs, metrics) | ↑ coverage (LOC may rise) | trace coverage across services, RED metrics added, runtime log-level toggle present |
+| **Performance** (optimizer items) | the plan's goal metric (p50/p99, throughput, CPU, RSS, job duration) on the recorded workload | per the goal | the targeted bottleneck's share of the profile before vs after; what the new top bottleneck is; complexity cost of the optimization, if any |
 
 When complexity rises for a robustness/observability win, state both numbers: the complexity cost and the coverage gained. A reader should see the trade was deliberate.
 
@@ -20,7 +21,18 @@ When complexity rises for a robustness/observability win, state both numbers: th
 - Use the **same tool/rules** as the before baseline: `gocyclo` (Go), `radon cc` (Python), `lizard` (multi-language), `eslint complexity` (JS/TS). State the tool.
 - If the baseline was hand-counted, hand-count the after the same way (decision points + 1: `if`, `else if`, `case`, `&&`, `||`, `for`, `while`, `catch`, ternary) and say "counted by hand".
 - LOC = function body lines, excluding signature, blanks, and comments — same as the writer's complexity map.
-- Reconstruct missing before numbers from git: measure the file at the commit/tag prior to the work (`git show <ref>:path`).
+- Reconstruct missing before numbers from git: measure the file at the commit/tag prior to the work (`git show <ref>:path`). The writer's complexity map is often scoped to the top 20–30 functions, so a touched function may simply not be in it — measure it at the baseline commit rather than leaving the before cell empty.
+- For a split, moved, or renamed function, give both locations (`old/path:line → new/path:line`) and add a family row: the original before, against the sum and the maximum of everything its logic became.
+
+### Performance items
+
+- Re-run the **exact command on the exact workload** recorded in `docs/architecture/performance.md`. Same machine class, same build mode, same data.
+- Warm up, repeat (at least 5 runs), and report the median with the spread on both sides. A change smaller than the run-to-run spread is "no measurable change", not a win.
+- If the recorded baseline can't be reproduced, measure before and after yourself: the baseline commit and HEAD, same session, same machine.
+- Show the profile, not only the total: confirm the targeted bottleneck actually shrank, and name what's on top now.
+
+| Metric | Workload | Before (median ± spread) | After (median ± spread) | Change | Target met? |
+|--------|----------|--------------------------|-------------------------|--------|-------------|
 
 ## Mermaid templates
 
@@ -95,5 +107,13 @@ Before handing each panel to the user:
 - [ ] Diagram present only when structure changed; otherwise "no structural change — see table".
 - [ ] Before and after diagrams reuse node ids and show metrics in the labels.
 - [ ] Table deltas were measured with the same method as the baseline (tool named, or "by hand").
+- [ ] Split/moved functions are compared as a family (total and max), not only by the surviving name.
+- [ ] Performance items compare the same command and workload on both sides, with spread.
 - [ ] When complexity rose, the offsetting coverage metric is shown and the trade called out.
 - [ ] Verdict references the improvement's original goal and is honest about partial wins.
+
+Before handing over the report:
+
+- [ ] The test suite was run, and changed/deleted/skipped tests and re-blessed snapshots since the baseline commit are listed with whether each was intended.
+- [ ] The roll-up reports total and maximum complexity and the count above threshold, not just an average.
+- [ ] The report is saved as markdown (`docs/architecture/refactor-report.md`) so the mermaid renders.
