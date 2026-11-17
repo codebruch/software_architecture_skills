@@ -53,8 +53,9 @@ Present the findings as a grouped table:
 
 | # | Dimension | Improvement | Evidence | Benefit | Risk | Cost | Reasoning |
 |---|-----------|-------------|----------|---------|------|------|-----------|
+| 1 | Testability | Extract the tax calculation from `calc_total` so it can be tested without a DB | `pricing.py:41`, confirmed | High | Medium | Low | Hotspot with no tests; the extraction changes a money path. |
 
-Evidence is the `file:line` plus `confirmed` or `inferred`.
+Every Evidence cell ends with the word `confirmed` or `inferred`, as in the example row. The reader uses it to tell what you saw in the code from what you deduced from the docs, so a location on its own is not enough.
 
 Security findings get two extra rules. **Cite, don't reproduce**: point to where a secret or a hole is, never copy the secret's value or write a working exploit into the table or the saved review. And **don't let a serious one wait for the menu**: a confirmed finding that an untrusted actor could exploit today (an unauthenticated admin route, a live credential in the repo, an injectable query on a public endpoint) is called out to the user at the top of the findings, before the table, whatever they go on to select.
 
